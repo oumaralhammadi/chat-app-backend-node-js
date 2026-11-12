@@ -7,61 +7,47 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum ConversationType {
-  DIRECT
-}
-
-enum MessageType {
-  TEXT
-  IMAGE
-  FILE
-}
-
 model User {
-  id           String    @id @default(uuid()) @db.VarChar(36)
-  email        String    @unique @db.VarChar(191)
-  username     String    @unique @db.VarChar(40)
-  passwordHash String    @db.VarChar(100)
-  displayName  String    @db.VarChar(80)
-  avatarUrl    String?   @db.VarChar(500)
-  statusText   String?   @db.VarChar(200)
-  isOnline     Boolean   @default(false)
+  id           String               @id @default(uuid()) @db.VarChar(36)
+  email        String               @unique
+  username     String               @unique @db.VarChar(40)
+  passwordHash String               @db.VarChar(100)
+  displayName  String               @db.VarChar(80)
+  avatarUrl    String?              @db.VarChar(500)
+  statusText   String?              @db.VarChar(200)
+  isOnline     Boolean              @default(false)
   lastSeenAt   DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  sessions     UserSession[]
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
   memberships  ConversationMember[]
-  sentMessages Message[]
   reads        MessageRead[]
+  sentMessages Message[]
   resetTokens  PasswordResetToken[]
+  sessions     UserSession[]
 
   @@map("users")
 }
 
 model Conversation {
-  id            String           @id @default(uuid()) @db.VarChar(36)
-  type          ConversationType @default(DIRECT)
-  // معرّفا المستخدمين مرتبان أبجدياً: يمنع تكرار المحادثة الفردية نفسها
-  directKey     String?          @unique @db.VarChar(80)
-  lastMessageAt DateTime         @default(now())
-  createdAt     DateTime         @default(now())
-
-  members  ConversationMember[]
-  messages Message[]
+  id            String               @id @default(uuid()) @db.VarChar(36)
+  type          ConversationType     @default(DIRECT)
+  directKey     String?              @unique @db.VarChar(80)
+  lastMessageAt DateTime             @default(now())
+  createdAt     DateTime             @default(now())
+  members       ConversationMember[]
+  messages      Message[]
 
   @@index([lastMessageAt])
   @@map("conversations")
 }
 
 model ConversationMember {
-  id             String   @id @default(uuid()) @db.VarChar(36)
-  conversationId String   @db.VarChar(36)
-  userId         String   @db.VarChar(36)
-  joinedAt       DateTime @default(now())
-
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String       @id @default(uuid()) @db.VarChar(36)
+  conversationId String       @db.VarChar(36)
+  userId         String       @db.VarChar(36)
+  joinedAt       DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([conversationId, userId])
   @@index([userId])
@@ -69,32 +55,32 @@ model ConversationMember {
 }
 
 model Message {
-  id              String      @id @default(uuid()) @db.VarChar(36)
-  conversationId  String      @db.VarChar(36)
-  senderId        String      @db.VarChar(36)
-  type            MessageType @default(TEXT)
-  content         String?     @db.Text
-  clientId        String?     @db.VarChar(64)
-  replyToId       String?     @db.VarChar(36)
-  forwardedFromId String?     @db.VarChar(36)
-  isEdited        Boolean     @default(false)
+  id              String              @id @default(uuid()) @db.VarChar(36)
+  conversationId  String              @db.VarChar(36)
+  senderId        String              @db.VarChar(36)
+  type            MessageType         @default(TEXT)
+  content         String?             @db.Text
+  clientId        String?             @db.VarChar(64)
+  replyToId       String?             @db.VarChar(36)
+  forwardedFromId String?             @db.VarChar(36)
+  isEdited        Boolean             @default(false)
   editedAt        DateTime?
   deliveredAt     DateTime?
   deletedAt       DateTime?
-  createdAt       DateTime    @default(now())
+  createdAt       DateTime            @default(now())
+  attachments     MessageAttachment[]
+  reads           MessageRead[]
+  conversation    Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  forwardedFrom   Message?            @relation("MessageForwards", fields: [forwardedFromId], references: [id])
+  forwards        Message[]           @relation("MessageForwards")
+  replyTo         Message?            @relation("MessageReplies", fields: [replyToId], references: [id])
+  replies         Message[]           @relation("MessageReplies")
+  sender          User                @relation(fields: [senderId], references: [id], onDelete: Cascade)
 
-  conversation  Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender        User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
-  replyTo       Message?     @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
-  replies       Message[]    @relation("MessageReplies")
-  forwardedFrom Message?     @relation("MessageForwards", fields: [forwardedFromId], references: [id], onDelete: SetNull)
-  forwards      Message[]    @relation("MessageForwards")
-  attachments   MessageAttachment[]
-  reads         MessageRead[]
-
-  // clientId يمنع تكرار الرسالة نفسها عند إعادة الإرسال بعد انقطاع الاتصال
   @@unique([senderId, clientId])
   @@index([conversationId, createdAt])
+  @@index([forwardedFromId], map: "messages_forwardedFromId_fkey")
+  @@index([replyToId], map: "messages_replyToId_fkey")
   @@map("messages")
 }
 
@@ -109,8 +95,7 @@ model MessageAttachment {
   width     Int?
   height    Int?
   createdAt DateTime @default(now())
-
-  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@index([messageId])
   @@map("message_attachments")
@@ -121,9 +106,8 @@ model MessageRead {
   messageId String   @db.VarChar(36)
   userId    String   @db.VarChar(36)
   readAt    DateTime @default(now())
-
-  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([messageId, userId])
   @@index([userId])
@@ -140,14 +124,12 @@ model UserSession {
   lastUsedAt       DateTime  @default(now())
   expiresAt        DateTime
   revokedAt        DateTime?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("user_sessions")
 }
 
-// جدول إضافي عن قائمتك، لازم لاستعادة كلمة المرور
 model PasswordResetToken {
   id        String    @id @default(uuid()) @db.VarChar(36)
   userId    String    @db.VarChar(36)
@@ -155,9 +137,18 @@ model PasswordResetToken {
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("password_reset_tokens")
+}
+
+enum ConversationType {
+  DIRECT
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
 }
