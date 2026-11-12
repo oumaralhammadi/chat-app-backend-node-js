@@ -2,6 +2,11 @@ node_modules/
 .env
 .env.*
 !.env.example
-dist/
-build/
+
+src/
+scripts/
+tsconfig.json
+fake.jpg
+
 coverage/
+build/
